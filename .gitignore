@@ -13,8 +13,7 @@ stop.sh
 **/.env
 **/.env.local
 **/.env.production
-IMPLEMENT_PLAN.md
-PROJECT_SUMMARY.md
+ROADMAP.md
 
 # ── Node ──────────────────────────────────────────────────────
 node_modules/

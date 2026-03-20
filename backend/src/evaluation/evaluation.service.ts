@@ -6,6 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import { ConfigService } from '@nestjs/config';
 import { StorySubmission, User } from '../database/entities';
 import { SubmitStoryDto } from './dto/submit-story.dto';
+import { WordsService } from '../words/words.service';
 
 interface EvaluationResult {
   scores: {
@@ -33,6 +34,7 @@ export class EvaluationService {
     private readonly usersRepository: Repository<User>,
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
+    private readonly wordsService: WordsService,
   ) {
     this.aiServiceUrl = this.configService.get<string>('AI_SERVICE_URL', 'http://localhost:5000');
   }
@@ -71,6 +73,11 @@ export class EvaluationService {
     });
 
     const saved = await this.submissionRepository.save(submission);
+
+    // Record word history for adaptive selection (fire-and-forget — non-blocking)
+    this.wordsService
+      .recordWordHistory(userId, dto.targetWords, evalResult.words_missing ?? [])
+      .catch(err => this.logger.warn(`recordWordHistory failed: ${err.message}`));
 
     // Count streak on first story submission of the day, regardless of score
     await this.updateStreak(userId);

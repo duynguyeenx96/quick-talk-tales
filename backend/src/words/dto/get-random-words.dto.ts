@@ -1,6 +1,6 @@
 import { IsEnum, IsOptional } from 'class-validator';
 import { Transform } from 'class-transformer';
-import { WordCategory, WordDifficulty } from '../../database/entities';
+import { WordCategory, WordDifficulty, WordTopic } from '../../database/entities';
 
 export class GetRandomWordsDto {
   @Transform(({ value }) => parseInt(value))
@@ -14,4 +14,8 @@ export class GetRandomWordsDto {
   @IsEnum(WordCategory)
   @IsOptional()
   category?: WordCategory;
+
+  @IsEnum(WordTopic)
+  @IsOptional()
+  topic?: WordTopic;
 }

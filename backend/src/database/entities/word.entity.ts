@@ -22,6 +22,17 @@ export enum WordDifficulty {
   HARD = 'hard',
 }
 
+export enum WordTopic {
+  ADVENTURE = 'adventure',
+  FANTASY = 'fantasy',
+  SCIENCE = 'science',
+  DAILY_LIFE = 'daily_life',
+  EMOTION = 'emotion',
+  NATURE = 'nature',
+  MYSTERY = 'mystery',
+  SPORT = 'sport',
+}
+
 @Entity('words')
 export class Word {
   @PrimaryGeneratedColumn('uuid')
@@ -35,6 +46,11 @@ export class Word {
 
   @Column({ type: 'enum', enum: WordDifficulty, default: WordDifficulty.EASY })
   difficulty: WordDifficulty;
+
+  // Comma-separated list of WordTopic values (e.g. "adventure,fantasy")
+  // A word can belong to multiple topics.
+  @Column({ type: 'simple-array', nullable: true })
+  topics: string[];
 
   @Column({ name: 'is_active', default: true })
   isActive: boolean;

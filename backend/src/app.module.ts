@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { databaseConfig } from './config/database.config';
@@ -17,6 +18,7 @@ import { ChallengesModule } from './challenges/challenges.module';
 import { FriendsModule } from './friends/friends.module';
 import { GroupChallengesModule } from './group-challenges/group-challenges.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { ClassroomModule } from './classroom/classroom.module';
 
 @Module({
   imports: [
@@ -28,6 +30,7 @@ import { NotificationsModule } from './notifications/notifications.module';
       inject: [ConfigService],
       useFactory: databaseConfig,
     }),
+    ScheduleModule.forRoot(),
     AuthModule,
     UsersModule,
     StoriesModule,
@@ -41,6 +44,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     FriendsModule,
     GroupChallengesModule,
     NotificationsModule,
+    ClassroomModule,
   ],
   controllers: [AppController],
   providers: [AppService],
