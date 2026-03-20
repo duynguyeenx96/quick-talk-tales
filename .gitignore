@@ -44,5 +44,3 @@ mobile/.packages
 backend/uploads/
 backend/public/
 
-# ── Admin (local-only tool, not for public) ───────────────────
-admin/
