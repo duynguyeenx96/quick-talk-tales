@@ -1,0 +1,41 @@
+# FastAPI and ASGI server
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# OpenAI Whisper for speech-to-text
+openai-whisper==20231117
+
+# Audio processing
+pydub==0.25.1
+numpy==1.24.3
+
+# HTTP client for external requests
+httpx==0.25.2
+
+# Environment variables
+python-dotenv==1.0.0
+
+# Data validation and serialization
+pydantic==2.5.0
+
+# File handling and utilities
+python-multipart==0.0.6
+
+# Logging
+loguru==0.7.2
+
+# Redis client for caching (optional)
+redis==5.0.1
+
+# Background tasks
+celery==5.3.4
+
+# Audio format support
+soundfile==0.12.1
+librosa==0.10.1
+
+# Claude API for story evaluation
+groq==0.13.0
+
+# Settings management
+pydantic-settings==2.1.0

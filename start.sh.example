@@ -1,0 +1,158 @@
+#!/bin/bash
+
+# ============================================================
+# Quick Talk Tales - Startup Script
+# Starts: Admin Dashboard, NestJS, FastAPI AI
+# Builds: Flutter Web → backend/public/, Flutter macOS
+#
+# SETUP:
+#   cp start.sh.example start.sh
+#   # Fill in your Google OAuth Client IDs below
+#   chmod +x start.sh && ./start.sh
+# ============================================================
+
+set -e
+
+ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+NESTJS_DIR="$ROOT_DIR/backend"
+FASTAPI_DIR="$ROOT_DIR/ai-service"
+FLUTTER_DIR="$ROOT_DIR/mobile"
+ADMIN_DIR="$ROOT_DIR/admin"
+LOGS_DIR="$ROOT_DIR/.logs"
+
+# Google OAuth Client IDs (Web and macOS use different client IDs)
+# Create credentials at: https://console.cloud.google.com/apis/credentials
+WEB_CLIENT_ID="${your_google_web_client_id}"
+MACOS_CLIENT_ID="${your_google_macos_client_id}"
+
+# Colors
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+log()   { echo -e "${GREEN}[✓]${NC} $1"; }
+info()  { echo -e "${CYAN}[→]${NC} $1"; }
+warn()  { echo -e "${YELLOW}[!]${NC} $1"; }
+error() { echo -e "${RED}[✗]${NC} $1"; }
+sep()   { echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"; }
+
+# ── Parse args ──────────────────────────────────────────────
+SKIP_FLUTTER_WEB=false
+SKIP_FLUTTER_MACOS=false
+SKIP_BUILD=false
+
+for arg in "$@"; do
+  case $arg in
+    --skip-flutter-web)   SKIP_FLUTTER_WEB=true ;;
+    --skip-flutter-macos) SKIP_FLUTTER_MACOS=true ;;
+    --skip-build)         SKIP_BUILD=true; SKIP_FLUTTER_WEB=true; SKIP_FLUTTER_MACOS=true ;;
+    --help|-h)
+      echo "Usage: ./start.sh [options]"
+      echo ""
+      echo "Options:"
+      echo "  --skip-flutter-web    Skip Flutter Web build"
+      echo "  --skip-flutter-macos  Skip Flutter macOS build"
+      echo "  --skip-build          Skip both Flutter builds"
+      exit 0
+      ;;
+  esac
+done
+
+mkdir -p "$LOGS_DIR"
+
+sep
+echo -e "  ${CYAN}Quick Talk Tales — Startup Script${NC}"
+sep
+echo ""
+
+# ── 1. Flutter Web Build ─────────────────────────────────────
+if [ "$SKIP_FLUTTER_WEB" = false ]; then
+  info "Building Flutter Web..."
+  cd "$FLUTTER_DIR"
+  flutter build web \
+    --dart-define=GOOGLE_CLIENT_ID="$WEB_CLIENT_ID" \
+    --release \
+    2>&1 | tail -5
+
+  info "Copying Flutter web build → backend/public/..."
+  rm -rf "$NESTJS_DIR/public"/*
+  cp -r "$FLUTTER_DIR/build/web/." "$NESTJS_DIR/public/"
+  log "Flutter Web built & copied to backend/public/"
+else
+  warn "Skipping Flutter Web build"
+fi
+
+echo ""
+
+# ── 2. Flutter macOS Build ───────────────────────────────────
+if [ "$SKIP_FLUTTER_MACOS" = false ]; then
+  info "Building Flutter macOS..."
+  cd "$FLUTTER_DIR"
+  flutter build macos \
+    --dart-define=GOOGLE_CLIENT_ID="$MACOS_CLIENT_ID" \
+    --release \
+    2>&1 | tail -5
+  log "Flutter macOS built → mobile/build/macos/Build/Products/Release/"
+else
+  warn "Skipping Flutter macOS build"
+fi
+
+echo ""
+
+# ── 3. Start NestJS ──────────────────────────────────────────
+sep
+info "Starting NestJS (port 3000)..."
+cd "$NESTJS_DIR"
+npm run start:dev > "$LOGS_DIR/nestjs.log" 2>&1 &
+NESTJS_PID=$!
+echo $NESTJS_PID > "$LOGS_DIR/nestjs.pid"
+log "NestJS started (PID: $NESTJS_PID) — logs: .logs/nestjs.log"
+
+# ── 4. Start FastAPI AI ──────────────────────────────────────
+info "Starting FastAPI AI (port 5001)..."
+cd "$FASTAPI_DIR"
+
+if [ -f ".venv/bin/activate" ]; then
+  source .venv/bin/activate
+elif [ -f "venv/bin/activate" ]; then
+  source venv/bin/activate
+fi
+
+uvicorn app.main:app --host 0.0.0.0 --port 5001 --reload > "$LOGS_DIR/fastapi.log" 2>&1 &
+FASTAPI_PID=$!
+echo $FASTAPI_PID > "$LOGS_DIR/fastapi.pid"
+log "FastAPI started (PID: $FASTAPI_PID) — logs: .logs/fastapi.log"
+
+# ── 5. Start Admin Dashboard ─────────────────────────────────
+info "Starting Admin Dashboard (port 5173)..."
+cd "$ADMIN_DIR"
+npm run dev > "$LOGS_DIR/admin.log" 2>&1 &
+ADMIN_PID=$!
+echo $ADMIN_PID > "$LOGS_DIR/admin.pid"
+log "Admin Dashboard started (PID: $ADMIN_PID) — logs: .logs/admin.log"
+
+# ── Summary ──────────────────────────────────────────────────
+echo ""
+sep
+echo -e "  ${GREEN}All services started!${NC}"
+sep
+echo ""
+echo -e "  ${CYAN}Services:${NC}"
+echo -e "    NestJS Backend   → http://localhost:3000"
+echo -e "    Flutter Web      → http://localhost:3000  (served via NestJS static)"
+echo -e "    FastAPI AI       → http://localhost:5001"
+echo -e "    Admin Dashboard  → http://localhost:5173"
+echo ""
+echo -e "  ${CYAN}Logs:${NC}"
+echo -e "    .logs/nestjs.log"
+echo -e "    .logs/fastapi.log"
+echo -e "    .logs/admin.log"
+echo ""
+echo -e "  Run ${YELLOW}./stop.sh${NC} to stop all services."
+sep
+
+trap 'echo ""; warn "Stopping all services..."; kill $NESTJS_PID $FASTAPI_PID $ADMIN_PID 2>/dev/null; exit 0' INT TERM
+
+wait
