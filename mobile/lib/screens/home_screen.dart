@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
+import '../providers/auth_provider.dart';
+import '../providers/classroom_provider.dart';
 import '../providers/game_provider.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/daily_challenges_widget.dart';
+import '../widgets/premium_upgrade_dialog.dart';
 import 'challenges_screen.dart';
+import 'classroom_screen.dart';
 import 'history_screen.dart';
 import 'leaderboard_screen.dart';
 import 'words_screen.dart';
@@ -37,10 +41,14 @@ class HomeScreen extends StatelessWidget {
                     _buildWelcome(context),
                     const SizedBox(height: 16),
                     const DailyChallengesWidget(),
+                    const SizedBox(height: 16),
+                    _buildClassroomCard(context),
                     const SizedBox(height: 24),
                     _buildWordCountPicker(context, game),
                     const SizedBox(height: 24),
                     _buildDifficultyPicker(context, game),
+                    const SizedBox(height: 24),
+                    _buildTopicPicker(context, game),
                     const Spacer(),
                     _buildStartButton(context, game),
                     const SizedBox(height: 16),
@@ -120,6 +128,124 @@ class HomeScreen extends StatelessWidget {
     ).animate().fadeIn(duration: 400.ms, delay: 100.ms).slideX(begin: -0.2);
   }
 
+  Widget _buildClassroomCard(BuildContext context) {
+    return Consumer<ClassroomProvider>(
+      builder: (context, classroom, _) {
+        final session = classroom.currentSession;
+        final bool hasSession = session != null;
+        final bool isActive = hasSession && session.status == ClassroomSessionStatus.active;
+        final bool isUpcoming = hasSession && session.status == ClassroomSessionStatus.upcoming;
+
+        return GestureDetector(
+          onTap: hasSession ? () => _openClassroom(context, classroom, session) : null,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: isActive
+                    ? [const Color(0xFF1CB0F6), const Color(0xFF2196F3)]
+                    : isUpcoming
+                        ? [const Color(0xFFFF9600), const Color(0xFFFF6D00)]
+                        : [Colors.grey.shade200, Colors.grey.shade300],
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+              ),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.class_rounded,
+                  color: hasSession ? Colors.white : Colors.grey.shade500,
+                  size: 28,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isActive
+                            ? 'Classroom is LIVE'
+                            : isUpcoming
+                                ? 'Classroom in ${session.minutesUntilStart} min'
+                                : 'No classroom right now',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'Nunito',
+                          color: hasSession ? Colors.white : Colors.grey.shade500,
+                        ),
+                      ),
+                      if (hasSession)
+                        Text(
+                          '${session.participantCount} players · ${session.wordCount} words'
+                          '${session.hasJoined ? ' · Joined ✓' : ''}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.white70,
+                            fontFamily: 'Nunito',
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                if (hasSession)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.25),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      session.hasJoined ? 'View' : 'Join',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        fontFamily: 'Nunito',
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ).animate().fadeIn(duration: 400.ms, delay: 150.ms);
+      },
+    );
+  }
+
+  Future<void> _openClassroom(
+      BuildContext context, ClassroomProvider classroom, ClassroomSessionInfo session) async {
+    if (session.hasJoined) {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => ClassroomScreen(session: session)));
+      return;
+    }
+
+    // Try to join
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await classroom.joinSession(session.id);
+
+    if (!ok) {
+      final err = classroom.error ?? '';
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(err.isNotEmpty ? err : 'Could not join session'),
+          backgroundColor: AppTheme.accentPink,
+        ),
+      );
+      return;
+    }
+
+    final refreshed = classroom.currentSession;
+    if (refreshed != null) {
+      navigator.push(MaterialPageRoute(builder: (_) => ClassroomScreen(session: refreshed)));
+    }
+  }
+
   Widget _buildWordCountPicker(BuildContext context, GameProvider game) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -190,57 +316,149 @@ class HomeScreen extends StatelessWidget {
   }
 
   Widget _buildDifficultyPicker(BuildContext context, GameProvider game) {
+    final isPremium =
+        context.watch<AuthProvider>().subscriptionPlan == 'premium';
+
     final difficulties = [
-      {'key': 'easy', 'label': 'Easy', 'color': AppTheme.primaryGreen},
-      {'key': 'medium', 'label': 'Medium', 'color': AppTheme.accentOrange},
-      {'key': 'hard', 'label': 'Hard', 'color': AppTheme.accentPink},
+      {
+        'key': 'easy',
+        'label': 'Easy',
+        'sublabel': 'A2–B1',
+        'color': AppTheme.primaryGreen,
+        'locked': false,
+      },
+      {
+        'key': 'medium',
+        'label': 'Medium',
+        'sublabel': 'B2',
+        'color': AppTheme.accentOrange,
+        'locked': !isPremium,
+      },
+      {
+        'key': 'hard',
+        'label': 'Hard',
+        'sublabel': 'C1–C2',
+        'color': AppTheme.accentPink,
+        'locked': !isPremium,
+      },
     ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Difficulty',
-          style: Theme.of(context)
-              .textTheme
-              .titleMedium
-              ?.copyWith(fontWeight: FontWeight.w700),
+        Row(
+          children: [
+            Text(
+              'Difficulty',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            if (!isPremium) ...[
+              const SizedBox(width: 8),
+              const Icon(Icons.lock_rounded, size: 14, color: Color(0xFFFFA000)),
+              const SizedBox(width: 4),
+              const Text(
+                'Medium & Hard — Premium',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Color(0xFFFFA000),
+                  fontFamily: 'Nunito',
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ],
         ),
         const SizedBox(height: 12),
         Row(
           children: difficulties.map((d) {
-            final selected = game.difficulty == d['key'];
+            final key = d['key'] as String;
+            final locked = d['locked'] as bool;
+            final selected = game.difficulty == key;
             final color = d['color'] as Color;
+
             return Expanded(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: GestureDetector(
-                  onTap: () => game.setDifficulty(d['key'] as String),
+                  onTap: () {
+                    if (locked) {
+                      PremiumUpgradeDialog.show(
+                        context,
+                        featureName: 'Unlock ${d['label']} Difficulty',
+                        description:
+                            'Challenge yourself with ${d['label']} (${d['sublabel']}) vocabulary.\nUpgrade to Premium to access all difficulty levels.',
+                        icon: Icons.school_rounded,
+                      );
+                    } else {
+                      game.setDifficulty(key);
+                    }
+                  },
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     decoration: BoxDecoration(
-                      color: selected ? color : Colors.white,
+                      color: locked
+                          ? Colors.grey.shade100
+                          : selected
+                              ? color
+                              : Colors.white,
                       borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: selected
-                              ? color.withOpacity(0.3)
-                              : Colors.black.withOpacity(0.06),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
+                      border: locked
+                          ? Border.all(color: Colors.grey.shade300, width: 1)
+                          : null,
+                      boxShadow: locked
+                          ? null
+                          : [
+                              BoxShadow(
+                                color: selected
+                                    ? color.withOpacity(0.3)
+                                    : Colors.black.withOpacity(0.06),
+                                blurRadius: 12,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                    ),
+                    child: Column(
+                      children: [
+                        if (locked)
+                          const Icon(
+                            Icons.lock_rounded,
+                            size: 14,
+                            color: Color(0xFFFFA000),
+                          )
+                        else
+                          const SizedBox(height: 0),
+                        Text(
+                          d['label'] as String,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: locked
+                                ? AppTheme.textSecondary
+                                : selected
+                                    ? Colors.white
+                                    : AppTheme.textPrimary,
+                            fontFamily: 'Nunito',
+                          ),
+                        ),
+                        Text(
+                          d['sublabel'] as String,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: locked
+                                ? AppTheme.textSecondary.withOpacity(0.6)
+                                : selected
+                                    ? Colors.white.withOpacity(0.8)
+                                    : AppTheme.textSecondary,
+                            fontFamily: 'Nunito',
+                          ),
                         ),
                       ],
-                    ),
-                    child: Text(
-                      d['label'] as String,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: selected ? Colors.white : AppTheme.textPrimary,
-                        fontFamily: 'Nunito',
-                      ),
                     ),
                   ),
                 ),
@@ -250,6 +468,153 @@ class HomeScreen extends StatelessWidget {
         ),
       ],
     ).animate().fadeIn(duration: 400.ms, delay: 300.ms);
+  }
+
+  Widget _buildTopicPicker(BuildContext context, GameProvider game) {
+    final isPremium =
+        context.watch<AuthProvider>().subscriptionPlan == 'premium';
+
+    const topics = [
+      {'key': 'adventure', 'label': 'Adventure', 'icon': Icons.explore_rounded},
+      {'key': 'fantasy',   'label': 'Fantasy',   'icon': Icons.auto_awesome_rounded},
+      {'key': 'science',   'label': 'Science',   'icon': Icons.science_rounded},
+      {'key': 'daily_life','label': 'Daily Life','icon': Icons.home_rounded},
+      {'key': 'emotion',   'label': 'Emotion',   'icon': Icons.favorite_rounded},
+      {'key': 'nature',    'label': 'Nature',    'icon': Icons.eco_rounded},
+      {'key': 'mystery',   'label': 'Mystery',   'icon': Icons.psychology_rounded},
+      {'key': 'sport',     'label': 'Sport',     'icon': Icons.sports_soccer_rounded},
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              'Topic',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(width: 8),
+            if (!isPremium)
+              const Row(
+                children: [
+                  Icon(Icons.lock_rounded, size: 14, color: Color(0xFFFFA000)),
+                  SizedBox(width: 4),
+                  Text(
+                    'Premium',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Color(0xFFFFA000),
+                      fontFamily: 'Nunito',
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              )
+            else if (game.topic != null)
+              GestureDetector(
+                onTap: () => game.setTopic(null),
+                child: const Text(
+                  'Clear',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppTheme.secondaryBlue,
+                    fontFamily: 'Nunito',
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: topics.map((t) {
+              final key = t['key'] as String;
+              final selected = game.topic == key;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: GestureDetector(
+                  onTap: () {
+                    if (!isPremium) {
+                      PremiumUpgradeDialog.show(
+                        context,
+                        featureName: 'Topic Selection',
+                        description:
+                            'Choose your story theme — Adventure, Fantasy, Science, and more.\nUpgrade to Premium to unlock topic selection.',
+                        icon: Icons.auto_awesome_rounded,
+                      );
+                    } else {
+                      game.setTopic(selected ? null : key);
+                    }
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? AppTheme.accentPurple
+                          : isPremium
+                              ? Colors.white
+                              : Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(20),
+                      border: !isPremium
+                          ? Border.all(color: Colors.grey.shade300, width: 1)
+                          : null,
+                      boxShadow: selected || !isPremium
+                          ? null
+                          : [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.06),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (!isPremium)
+                          const Icon(Icons.lock_rounded,
+                              size: 12, color: Color(0xFFFFA000)),
+                        if (!isPremium) const SizedBox(width: 4),
+                        Icon(
+                          t['icon'] as IconData,
+                          size: 14,
+                          color: selected
+                              ? Colors.white
+                              : isPremium
+                                  ? AppTheme.textSecondary
+                                  : AppTheme.textSecondary.withOpacity(0.5),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          t['label'] as String,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            fontFamily: 'Nunito',
+                            color: selected
+                                ? Colors.white
+                                : isPremium
+                                    ? AppTheme.textPrimary
+                                    : AppTheme.textSecondary.withOpacity(0.6),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    ).animate().fadeIn(duration: 400.ms, delay: 350.ms);
   }
 
   Widget _buildStartButton(BuildContext context, GameProvider game) {

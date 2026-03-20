@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../providers/classroom_provider.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/classroom_overlay.dart';
 import 'home_screen.dart';
 import 'group_challenges_screen.dart';
 import 'friends_screen.dart';
@@ -33,6 +35,16 @@ class _MainScreenState extends State<MainScreen> {
     super.initState();
     _currentIndex = widget.initialIndex;
     _loadNotifCount();
+    // Start classroom session polling when main screen mounts
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ClassroomProvider>().startPolling();
+    });
+  }
+
+  @override
+  void dispose() {
+    context.read<ClassroomProvider>().stopPolling();
+    super.dispose();
   }
 
   Future<void> _loadNotifCount() async {
@@ -53,9 +65,11 @@ class _MainScreenState extends State<MainScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _pages,
+      body: ClassroomOverlay(
+        child: IndexedStack(
+          index: _currentIndex,
+          children: _pages,
+        ),
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(

@@ -240,11 +240,14 @@ class ApiService {
   static Future<List<Map<String, dynamic>>> getRandomWords({
     required int count,
     String? difficulty,
+    String? topic,
   }) async {
-    final query = 'count=$count${difficulty != null ? '&difficulty=$difficulty' : ''}';
+    final params = StringBuffer('count=$count');
+    if (difficulty != null) params.write('&difficulty=$difficulty');
+    if (topic != null) params.write('&topic=$topic');
     final res = await _withRefresh(() async {
       final h = await _authHeaders();
-      return http.get(Uri.parse('$baseUrl/words/random?$query'), headers: h);
+      return http.get(Uri.parse('$baseUrl/words/random?$params'), headers: h);
     });
     final data = jsonDecode(res.body);
     if (res.statusCode >= 400) throw ApiException('Failed to fetch words', res.statusCode);
@@ -484,6 +487,78 @@ class ApiService {
       return http.get(Uri.parse('$baseUrl/payments/status/$orderId'), headers: h);
     });
     return _decode(res);
+  }
+
+  // ── Classroom ─────────────────────────────────────────────────────────────
+
+  static Future<Map<String, dynamic>?> getClassroomCurrent() async {
+    final res = await _withRefresh(() async {
+      final h = await _authHeaders();
+      return http.get(Uri.parse('$baseUrl/classroom/current'), headers: h);
+    });
+    if (res.statusCode == 204) return null;
+    final data = _decode(res);
+    if (data == null || (data is Map && data.isEmpty)) return null;
+    return data as Map<String, dynamic>;
+  }
+
+  static Future<void> joinClassroomSession(String sessionId) async {
+    final res = await _withRefresh(() async {
+      final h = await _authHeaders();
+      return http.post(Uri.parse('$baseUrl/classroom/$sessionId/join'), headers: h);
+    });
+    _decode(res);
+  }
+
+  static Future<Map<String, dynamic>> submitClassroomStory({
+    required String sessionId,
+    required String storyText,
+  }) async {
+    final res = await _withRefresh(() async {
+      final h = await _authHeaders();
+      return http.post(
+        Uri.parse('$baseUrl/classroom/$sessionId/submit'),
+        headers: h,
+        body: jsonEncode({'storyText': storyText}),
+      );
+    });
+    return _decode(res);
+  }
+
+  static Future<List<Map<String, dynamic>>> getClassroomLeaderboard(String sessionId) async {
+    final res = await _withRefresh(() async {
+      final h = await _authHeaders();
+      return http.get(Uri.parse('$baseUrl/classroom/$sessionId/leaderboard'), headers: h);
+    });
+    final data = _decode(res);
+    return (data as List).cast<Map<String, dynamic>>();
+  }
+
+  static Future<List<Map<String, dynamic>>> getClassroomSessions() async {
+    final res = await _withRefresh(() async {
+      final h = await _authHeaders();
+      return http.get(Uri.parse('$baseUrl/classroom/sessions'), headers: h);
+    });
+    final data = _decode(res);
+    return (data as List).cast<Map<String, dynamic>>();
+  }
+
+  static Future<List<Map<String, dynamic>>> getClassroomMyHistory() async {
+    final res = await _withRefresh(() async {
+      final h = await _authHeaders();
+      return http.get(Uri.parse('$baseUrl/classroom/my-history'), headers: h);
+    });
+    final data = _decode(res);
+    return (data as List).cast<Map<String, dynamic>>();
+  }
+
+  static Future<List<Map<String, dynamic>>> getClassroomAllTimeLeaderboard() async {
+    final res = await _withRefresh(() async {
+      final h = await _authHeaders();
+      return http.get(Uri.parse('$baseUrl/classroom/leaderboard/all-time'), headers: h);
+    });
+    final data = _decode(res);
+    return (data as List).cast<Map<String, dynamic>>();
   }
 }
 

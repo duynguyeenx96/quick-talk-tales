@@ -62,6 +62,7 @@ class GameProvider extends ChangeNotifier {
   List<WordItem> _words = [];
   int _wordCount = 5;
   String _difficulty = 'easy';
+  String? _topic; // null = random (no filter)
   EvaluationResult? _result;
   String _error = '';
 
@@ -69,6 +70,7 @@ class GameProvider extends ChangeNotifier {
   List<WordItem> get words => _words;
   int get wordCount => _wordCount;
   String get difficulty => _difficulty;
+  String? get topic => _topic;
   EvaluationResult? get result => _result;
   String get error => _error;
 
@@ -82,6 +84,11 @@ class GameProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setTopic(String? t) {
+    _topic = t;
+    notifyListeners();
+  }
+
   Future<bool> loadRandomWords() async {
     _state = GameState.loadingWords;
     _error = '';
@@ -91,6 +98,7 @@ class GameProvider extends ChangeNotifier {
       final data = await ApiService.getRandomWords(
         count: _wordCount,
         difficulty: _difficulty,
+        topic: _topic,
       );
       _words = data.map((j) => WordItem.fromJson(j)).toList();
       _state = GameState.ready;
@@ -141,6 +149,7 @@ class GameProvider extends ChangeNotifier {
     _words = [];
     _result = null;
     _error = '';
+    // topic and difficulty are intentionally preserved between rounds
     notifyListeners();
   }
 }
